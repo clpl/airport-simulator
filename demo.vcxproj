@@ -119,6 +119,8 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>SOIL.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/SAFESEH:NO %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -142,6 +144,7 @@
   <ItemGroup>
     <ClInclude Include="button.h" />
     <ClInclude Include="checkpoint.h" />
+    <ClInclude Include="EventGenerator.h" />
     <ClInclude Include="function.h" />
     <ClInclude Include="globalvar.h" />
     <ClInclude Include="glyph.h" />
@@ -158,6 +161,7 @@
     <ClCompile Include="button.cpp" />
     <ClCompile Include="checkpoint.cpp" />
     <ClCompile Include="demo.cpp" />
+    <ClCompile Include="EventGenerator.cpp" />
     <ClCompile Include="function.cpp" />
     <ClCompile Include="globalvar.cpp" />
     <ClCompile Include="glyph.cpp" />

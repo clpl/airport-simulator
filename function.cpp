@@ -8,7 +8,11 @@
 #include "struct.h"
 #include "globalvar.h"
 #include <Windows.h>
+#include <string>
 extern time_t t_unit;
+
+using namespace std;
+
 
 time_t getTime()
 {
@@ -19,7 +23,7 @@ void readSettingFile()
 {
     std::ifstream fin("para.dat",std::ios::binary);
     int *a=new int[10];
-    fin.read((char *)a,sizeof(a));
+    fin.read((char *)a,sizeof(a)*8);
     MinCheck=a[0];
     MaxCheck=a[1];
     MaxCustSingleLine=a[2];
@@ -29,7 +33,7 @@ void readSettingFile()
     MaxCustCheck=a[6];
     MaxSec=a[7];
     fin.close();
-    delete a;
+    delete[] a;
 }
 
 void writeSettingFile()
@@ -44,9 +48,9 @@ void writeSettingFile()
     a[5]=EasySeqLen;
     a[6]=MaxCustCheck;
     a[7]=MaxSec;
-    fout.write((char *)a,sizeof(a));
+    fout.write((char *)a,sizeof(a)*8);
     fout.close();
-    delete a;
+    delete[] a;
 }
 
 void rondomWriteInputFile()
@@ -70,7 +74,7 @@ void rondomWriteInputFile()
     }
     fin.write((char*)en,sizeof(en));
     fin.close();
-    delete en;
+    delete[] en;
 }
 
 void readInputFile(Entry *en)
@@ -88,38 +92,86 @@ void clearLogFile()
 
 void writeLogFile(std::string s)
 {
-    std::fstream fout("Log.txt",std::ios::app);
-    fout<<s;
+	std::fstream fout("Log.txt", std::ios::app);
+	fout << "time:" << getTime() / 2 << " ";
+	fout << s << "\n";
 }
+
 
 int distribution(CheckPoint* CheckP[])
 {
-    for(int i=0;i<MaxCheck;i++)
-    {
-        if(CheckP[i]->getState()==onDuty&&!CheckP[i]->isFull())
-        {
-            return i;
-        }
-    }
-    return -1;
+	if (distributionMethod == 0)
+	{
+		for (int i = 0; i < MaxCheck; i++)
+		{
+			if (CheckP[i]->getState() == onDuty && !CheckP[i]->isFull())
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+	else if (distributionMethod == 1)
+	{
+		int nowminid = -1;
+		int nowmin = 0x3f3f3f3f;
+		for (int i = 0; i < MaxCheck; i++)
+		{
+			if (CheckP[i]->getState() == onDuty && !CheckP[i]->isFull())
+			{
+				if (nowmin > CheckP[i]->getNum())
+				{
+					nowmin = CheckP[i]->getNum();
+					nowminid = i;
+				}
+			}
+		}
+		return nowminid;
+	}
+	else if (distributionMethod == 2)
+	{
+		int nowminid = -1;
+		int nowmin = 0x3f3f3f3f;
+		for (int i = 0; i < MaxCheck; i++)
+		{
+			if (CheckP[i]->getState() == onDuty && !CheckP[i]->isFull())
+			{
+				int checkTimeSum = 0;
+				for (int j = 0; j < CheckP[i]->getNum(); j++)
+				{
+					checkTimeSum += (*CheckP[i])[j].checkTime;
+				}
+				if (nowmin > checkTimeSum)
+				{
+					nowmin = checkTimeSum;
+					nowminid = i;
+				}
+			}
+		}
+		return nowminid;
+	}
 }
+
+
 
 void refreshCheckPoint(CheckPoint* CheckP[])
 {
     for(int i=0;i<MaxCheck;i++)
-        if(CheckP[i]->getState()==onDuty)
-            {
+		//if(CheckP[i]->getState()==onDuty||CheckP[i]->getState()==closed)
+           // {
                 CheckP[i]->refreshNum();
-            }
-		else if(CheckP[i]->getState()==pause)
+           // }
+		/*else if(CheckP[i]->getState()==pause)
 		{
-			CheckP[i]->nextPopTime += t_unit;
-		}
+			
+		}*/
 }
 
 //开放或关闭窗口 1开-1关0不动
 int whetherSwitchCheckPoint(SerpQueue &SerpQ, const int nowCheckNum)
 {
+	if (!nowCheckNum)
+		return 0;
 	int num = SerpQ.getNum() / nowCheckNum;
 	if (num>MaxCheck)
 		return 1;
@@ -143,12 +195,12 @@ void makeSwitchCheckPoint(CheckPoint* CheckP[], int op)
 {
 	if (op == 1)
 	{
-		for (int i = MinCheck - 1; i<MaxCheck; i++)
+		for (int i = max(MinCheck - 1, 0); i<MaxCheck; i++)
 		{
 			if (CheckP[i]->getState() == closed)
 			{
 				CheckP[i]->start();
-				//cout << i << "is start" << endl;
+				writeLogFile(std::to_string(i) + std::string(" checkpoint is opened"));
 				return;
 			}
 		}
@@ -160,7 +212,7 @@ void makeSwitchCheckPoint(CheckPoint* CheckP[], int op)
 			if (CheckP[i]->getState() == onDuty)
 			{
 				CheckP[i]->shut();
-				//cout << i << "is shut" << endl;
+				writeLogFile(std::to_string(i) + std::string(" checkpoint is closed"));
 				return;
 			}
 		}
@@ -168,21 +220,38 @@ void makeSwitchCheckPoint(CheckPoint* CheckP[], int op)
 	return;
 }
 
-void programEnd(CheckPoint* CheckP[])
+void switchCheckPointState(CheckPoint* CheckP[], int CheckId)
 {
-	for (int i = 0; i<MaxCheck; i++)
+	if (CheckP[CheckId]->getState() == onDuty)
 	{
-		CheckP[i]->shut();
+		CheckP[CheckId]->toPause(rand()%MaxSec);
+		cout << &CheckP[CheckId] << " has paused" << endl;
+		writeLogFile((char)(CheckId - '0') + std::string(" checkpoint begins to pause"));
 	}
-	int sum = 0;
-	while (true)
+	else
 	{
+		CheckP[CheckId]->start();
+		writeLogFile((char)(CheckId - '0') + std::string(" Checkpoint end pause"));
+	}
+}
+
+void programEnd(CheckPoint* CheckP[], SerpQueue* SerpQ)
+{
+	isoffDuty = true;
+	MinCheck = 0;
+	EasySeqLen = 1;
+	if (SerpQ->getNum() <= 0)
 		for (int i = 0; i<MaxCheck; i++)
 		{
+			CheckP[i]->shut();
+		}
+	SerpQ->shut();
+	int sum = 0;
+		for (int i = 0; i < MaxCheck; i++)
+		{
 			sum += CheckP[i]->getNum();
+			//sum += SerpQ->getNum();
 		}
 		if (!sum)
 			exit(0);
-		Sleep(t_unit);
-	}
 }

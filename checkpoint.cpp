@@ -10,8 +10,9 @@
 using namespace std;
 
 int CheckPoint::num = 0;
-float CPInterval = 0.22;
-float CPBaseX = -0.8, CPBaseY = -0.05;
+float CPInterval = 0.15;
+float CPBaseX = -0.70, CPBaseY = -0.15;
+float CPWidth = 0.135, CPHeight = 0.35;
 
 void CheckPoint::start() {
     if(state != offDuty) {
@@ -25,13 +26,13 @@ void CheckPoint::toPause()
 		state = pause;
 }
 
-void CheckPoint::toPause(int pauseTime)
+void CheckPoint::toPause(time_t pauseTime)
 {
 	if (state != offDuty && state != closed)
 	{
-		state = offDuty;
+		state = pause;
 		nextPopTime += pauseTime;
-		pauseEndTime = getTime() + pauseTime;
+		pauseEndTime = getTime() + pauseTime*2;
 	}
 }
 
@@ -44,10 +45,15 @@ int CheckPoint::getState() {
 }
 
 void CheckPoint::refreshNum() {
-    if(!isempty()&&getTime()>nextPopTime) {
-        popPassenger();
-        for(int i = 0; i < q.size(); i++)
+	if (state == pause&&getTime() > pauseEndTime)
+	{
+		state = onDuty;
+	} else if(state == onDuty || state == closed) {
+        if(!isempty()&&getTime()>nextPopTime) {
+            popPassenger();
+            for(int i = front; i != rear; i = (i+1)%500)
             q[i].routeId--;
+        }
     }
 }
 
@@ -56,7 +62,7 @@ void CheckPoint::refreshPopTime() {
     {
         //popPassenger();
 		if(!isempty())
-        nextPopTime=getTime()+getFirstPassenger().checkTime;
+        nextPopTime=getTime()+getFirstPassenger().checkTime*10;
     }
 }
 
@@ -67,14 +73,16 @@ void CheckPoint::shut()
 
 
 void CheckPoint::addPassenger(Passenger p) {
-    p.routeId = MaxCustNum+id*MaxCustCheck-1;
-    //cout << "routeId changed to " << p.routeId << endl;
-    q.push_back(p);
+    p.routeId = MaxCustNum+1+id*(MaxCustCheck+1) + getNum();
+    if(p.routeId > MaxCustNum+(id+1)*(MaxCustCheck+1)) {
+        p.routeId = MaxCustNum+(id+1)*(MaxCustCheck+1);
+    }
+    Queue::addPassenger(p);
 }
 
 CheckPoint::CheckPoint() {
     id = num++;
-    width = 0.175; height = 0.5;
+    width = CPWidth; height = CPHeight;
     texId = ::texId[_checkPoint];
     pos.x = CPBaseX + id*CPInterval;
     pos.y = CPBaseY;
@@ -82,8 +90,16 @@ CheckPoint::CheckPoint() {
 
 void CheckPoint::draw() {
     this->Glyph::draw();
-    for(int i = 0; i < this->getNum(); i++)
-        (*this)[i].draw();
-    //cout << this->getNum() << "passengers drawn " << endl;
+    switch(state) {
+        case closed:
+            drawObject(CPblock, Point(pos.x+0.05, pos.y+height), 0.07, 0.12);
+            break;
+        case pause:
+            drawObject(CPpause, Point(pos.x+0.05, pos.y+height), 0.07, 0.12);
+            break;
+    }
+    for(int i = 0; i < this->getNum(); i++) {
+        if(i == 0) (*this)[i].draw(true);
+        else (*this)[i].draw(false);
+    }
 }
-

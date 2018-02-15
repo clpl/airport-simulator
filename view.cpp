@@ -13,6 +13,7 @@
 #include "globalvar.h"
 #include "button.h"
 
+
 #include "glyph.h"
 #include "passenger.h"
 #include "serpqueue.h"
@@ -24,15 +25,17 @@ using std::endl;
 clock_t clock();
 
 // 窗口宽高
-const int windowWidth = 1024;
-const int windowHeight = 576;
+const int windowWidth = 1366;
+const int windowHeight = 768;
 int curWindowWidth = 1366;
 int curWindowHeight = 768;
 
 // 窗口名称
-const char* windowTitle = "测试样例";
+const char* windowTitle = "杀虫灭菌安检口";
 
 extern CheckPoint* CheckP[];
+extern RestArea RestA;
+extern SerpQueue muslimQ;
 
 extern texName a;
 int texId[300];
@@ -40,7 +43,7 @@ int texId[300];
 std::vector<Point> route;
 // 每排&每斜线人数
 // passenger纹理总数
-int passengerTexNum = 5;
+int passengerTexNum = 10;
 
 
 // 控制FPS
@@ -60,13 +63,18 @@ float SQDW, SQDH, SQLRW, SQLRH;
 float SQdX, SQdY, SQdX_, SQdY_;
 
 
-float varX = -0.5, varY = 0.7;
+float varX = -0.5, varY = 0.75;
 float nameVarSpace = 0.7;
 float nameBtnSpace = 0.53;
 float nameBtnSpace2 = 0.3;
 float varListHeight = 0.2;
 
+extern float CPInterval;
+extern float CPBaseX, CPBaseY;
+extern float CPWidth, CPHeight;
+
 std::vector<Button> btnList;
+std::vector<Button> aniBtnList;
 
 void drawString(const char* str);
 void selectFont(int size, int charset, const char* face);
@@ -96,20 +104,33 @@ void show() {
     glutMainLoop();
 }
 
+void delayedVarInit(int var) {
+    if(aniWindow) {
+        for(int i = 0; i < MaxCheck; i++) CheckP[i] = new CheckPoint();
+        // 生成乘客路径点
+        genRoute();
+        for(int i = 0; i < MaxCheck; i++) {
+            aniBtnList.push_back(Button(playAndPause_normal, CPBaseX+0.06+i*CPInterval, CPBaseY+0.7, 0.06, 0.10667));
+            aniBtnList[i].corspCP = i;
+        }
+        aniBtnList.push_back(Button(gooff_normal, 0.7, -1.0, 0.3, 0.25));
+        aniBtnList.push_back(Button(plus_normal, -0.9, -0.6, 0.1, 0.18));
+        initFinished = true;
+    } else {
+        glutTimerFunc(1, delayedVarInit, 0);
+    }
+}
+
 void drawInit() {
     // 必要的数值计算
     lmd = alp / sqdw;
-    //cout << lmd << endl;
     SQDW=lmd*sqdw, SQDH=lmd*sqdh*alph, SQLRW=lmd*sqlrw, SQLRH=lmd*sqlrh*alph;
     SQdX=lmd*dltx, SQdY=lmd*dlty*alph, SQdX_=lmd*dltx_, SQdY_=lmd*dlty_*alph;
 
     // 读取材质
     loadTexture();
 
-    for(int i = 0; i < MaxCheck; i++) CheckP[i] = new CheckPoint();
-
-    // 生成乘客路径点
-    genRoute();
+    glutTimerFunc(1, delayedVarInit, 0);
 
     // 生成按钮
     initButton();
@@ -130,24 +151,39 @@ void flush(int value) {
 
     if(value == 0) {
         // 变量编辑
+        drawObject(initbg, Point(-1.0, -1.0), 2.0, 2.0);
         drawVars();
         drawButton();
     } else {
         // 图形
-
+        drawObject(anibg, Point(-1.0, -1.0), 2.0, 2.0);
+        
+        //drawObject(playAndPause_normal, Point(-1.0, -1.0), 2.0, 2.0);
         // 移动队列中所有乘客并绘制
         for(int i = 0; i < SerpQ.getNum(); i++) SerpQ[i].move();
-        drawSerpQueue();
         for(int i = 0; i < MaxCheck; i++) {
             for(int j = 0; j < CheckP[i]->getNum(); j++)
-                (*(CheckP[i]))[j].move();
+            (*(CheckP[i]))[j].move();
         }
+        for(int i = 0; i < muslimQ.getNum(); i++) {
+            muslimQ[i].move();
+        }
+        if(muslimQ.getNum() > 0 && muslimQ[0].pos.x > 0.75) muslimQ.popPassenger();
+        drawObject(cp_muslim, Point(CPBaseX + 10*CPInterval, CPBaseY), CPWidth+0.05, CPHeight+0.26);
         drawCheckPoint();
+        drawSerpQueue();
+
+        drawButton();
+        drawRestAreaNum();
+
+        if(isoffDuty) {
+            glRasterPos2f(0.75, 0.75);
+            drawString("Off Duty!");
+        }
 
     }
 
     glutSwapBuffers();
-    //cout << "flushed!" << endl;
     if(aniWindow) glutTimerFunc(timeInterval, flush, 1);
     else glutTimerFunc(timeInterval, flush, 0);
 }
@@ -223,16 +259,32 @@ void drawVars() {
     sprintf(s, "%d", MaxSec);
     drawString(s);   //输出的字符串
 
+    glRasterPos2f(varX, varY-8*varListHeight);
+    sprintf(s, "distributionMethod");
+    drawString(s);
+    glRasterPos2f(varX + nameVarSpace, varY-8*varListHeight);
+    sprintf(s, "%d", distributionMethod);
+    drawString(s);   //输出的字符串
+
+}
+
+void drawRestAreaNum() {
+    glColor3f(0.0f, 0.0f, 0.0f);
+    char s[100];
+    glRasterPos2f(-0.95, -0.2);
+    sprintf(s, "%d", RestA.getNum());
+    drawString(s);   //输出的字符串
+    glColor3f(1.0f, 1.0f, 1.0f);
 }
 
 void initButton() {
-    for(int i = 0; i < 8; i++) {
-        btnList.push_back(Button(varX+nameBtnSpace, varY-i*varListHeight-0.01, arrow_left_normal));
+    for(int i = 0; i < 9; i++) {
+        btnList.push_back(Button(arrow_left_normal, varX+nameBtnSpace, varY-i*varListHeight-0.01, 0.06, 0.10667));
     }
-    for(int i = 0; i < 8; i++) {
-        btnList.push_back(Button(varX+nameBtnSpace+nameBtnSpace2, varY-i*varListHeight-0.01, arrow_right_normal));
+    for(int i = 0; i < 9; i++) {
+        btnList.push_back(Button(arrow_right_normal, varX+nameBtnSpace+nameBtnSpace2, varY-i*varListHeight-0.01, 0.06, 0.10667));
     }
-    btnList.push_back(Button(0.5, -0.5, button_normal));
+    btnList.push_back(Button(button_normal, 0.55, -0.83, 0.3, 0.23));
     btnList[0].corspVar = &MinCheck;
     btnList[1].corspVar = &MaxCheck;
     btnList[2].corspVar = &MaxCustSingleLine;
@@ -241,33 +293,44 @@ void initButton() {
     btnList[5].corspVar = &EasySeqLen;
     btnList[6].corspVar = &MaxCustCheck;
     btnList[7].corspVar = &MaxSec;
-    btnList[8].corspVar = &MinCheck;
-    btnList[9].corspVar = &MaxCheck;
-    btnList[10].corspVar = &MaxCustSingleLine;
-    btnList[11].corspVar = &MaxLines;
-    btnList[12].corspVar = &MaxSeqLen;
-    btnList[13].corspVar = &EasySeqLen;
-    btnList[14].corspVar = &MaxCustCheck;
-    btnList[15].corspVar = &MaxSec;
+    btnList[8].corspVar = &distributionMethod;
+    btnList[9].corspVar = &MinCheck;
+    btnList[10].corspVar = &MaxCheck;
+    btnList[11].corspVar = &MaxCustSingleLine;
+    btnList[12].corspVar = &MaxLines;
+    btnList[13].corspVar = &MaxSeqLen;
+    btnList[14].corspVar = &EasySeqLen;
+    btnList[15].corspVar = &MaxCustCheck;
+    btnList[16].corspVar = &MaxSec;
+    btnList[17].corspVar = &distributionMethod;
+
 
 }
 
 void drawButton() {
-    for(auto btn : btnList) {
-        btn.draw();
+    if(aniWindow) {
+        for(auto btn : aniBtnList) {
+            btn.draw();
+        }
+    } else {
+        for(auto btn : btnList) btn.draw();
     }
 }
 
 void mouseMotion(int x, int y) {
-    for(int i = 0; i < btnList.size(); i++) {
-        btnList[i].mouseMove(x, y);
+    if(aniWindow) {
+        for(int i = 0; i < aniBtnList.size(); i++) aniBtnList[i].mouseMove(x, y);
+    } else {
+        for(int i = 0; i < btnList.size(); i++) btnList[i].mouseMove(x, y);
     }
 }
 
 
-void mouseClick(int btn, int state, int x, int y) {
-    for(int i = 0; i < btnList.size(); i++) {
-        btnList[i].mouseClick(btn, state, x, y);
+void mouseClick(int mbtn, int state, int x, int y) {
+    if(aniWindow) {
+        for(int i = 0; i < aniBtnList.size(); i++) aniBtnList[i].mouseClick(mbtn, state, x, y);
+    } else {
+        for(int i = 0; i < btnList.size(); i++) btnList[i].mouseClick(mbtn, state, x, y);
     }
 
 }
@@ -278,20 +341,24 @@ void drawSerpQueue() {
     drawObject(_serpQueueLeft, Point(SQX+SQdX+2*SQdX_,SQY+SQdY+2*SQdY_), SQLRW, SQLRH);
     int i = 0;
     for(int j = 0; j < MaxCustSingleLine + MaxCustSingleSkew && i < SerpQ.getNum(); j++, i++) {
-        
         SerpQ[i].draw();
     }
-    //cout << "drawing pass at" << SerpQ[1].pos.x << "." << SerpQ[1].pos.y << endl;
-    drawObject(_serpQueueRight, Point(SQX+SQdX+SQdX_,SQY+SQdY+SQdY_), SQLRW, SQLRH);
+    if(i < SerpQ.getNum())
+        drawObject(_serpQueueRight, Point(SQX+SQdX+SQdX_,SQY+SQdY+SQdY_), SQLRW, SQLRH);
     for(int j = 0; j < MaxCustSingleLine + MaxCustSingleSkew && i < SerpQ.getNum(); j++, i++)
         SerpQ[i].draw();
-    drawObject(_serpQueueLeft, Point(SQX+SQdX,SQY+SQdY), SQLRW, SQLRH);
+    if(i < SerpQ.getNum())
+        drawObject(_serpQueueLeft, Point(SQX+SQdX,SQY+SQdY), SQLRW, SQLRH);
     for(int j = 0; j < MaxCustSingleLine + MaxCustSingleSkew && i < SerpQ.getNum(); j++, i++)
         SerpQ[i].draw();
-    drawObject(_serpQueueDownU, Point(SQX,SQY), SQDW, SQDH);
-    for(int j = 0; j < MaxCustSingleLine + MaxCustSingleSkew && i < SerpQ.getNum(); j++, i++)
-        SerpQ[i].draw();
-    drawObject(_serpQueueDownL, Point(SQX,SQY), SQDW, SQDH);
+    if(i < SerpQ.getNum()) {
+        drawObject(_serpQueueDownU, Point(SQX,SQY), SQDW, SQDH);
+        for(int j = 0; j < MaxCustSingleLine + MaxCustSingleSkew && i < SerpQ.getNum(); j++, i++)
+            SerpQ[i].draw();
+        drawObject(_serpQueueDownL, Point(SQX,SQY), SQDW, SQDH);
+    }
+    for(int i = 0; i < muslimQ.getNum(); i++)
+        muslimQ[i].draw();
 }
 
 
@@ -302,38 +369,33 @@ Point genSkew(Point base) {
 }
 
 void genCPRoute(float x, float y) {
-    for(int i = 0; i < MaxCustCheck; i++) {
-        route.push_back(Point(x-i*0.05, y-i*0.075));
+    for(int i = 0; i < MaxCustCheck+1; i++) {
+        route.push_back(Point(x-i*0.02, y-i*0.03));
     }
 }
 
 void genRoute() {
-    Point base(SQX + 88*lmd, SQY + 66*lmd);
-    float step = 1144*1.0/(MaxCustSingleLine+1)*lmd;
-    //cout << lmd;
+    Point base(SQX + 88*lmd, SQY + 75*lmd);
+    float step = 1050*1.0/(MaxCustSingleLine+1)*lmd;
     for(int i = 0; i < MaxCustSingleLine; i++) route.push_back(Point(base.x+step/2+i*step, base.y));
     base = genSkew(Point(base.x+(MaxCustSingleLine-1)*step+step/2, base.y));
     step = -step;
     for(int i = 0; i < MaxCustSingleLine; i++) route.push_back(Point(base.x+step/2+i*step, base.y));
-    base = genSkew(Point(base.x+(MaxCustSingleLine-1)*step+step/2, base.y));
+    base = genSkew(Point(base.x+(MaxCustSingleLine-1)*step-step, base.y));
     step = -step;
-    for(int i = 0; i < MaxCustSingleLine; i++) route.push_back(Point(base.x+step/2+i*step, base.y));
-    base = genSkew(Point(base.x+(MaxCustSingleLine-1)*step+step/2, base.y));
+    for(int i = 0; i < MaxCustSingleLine; i++) route.push_back(Point(base.x/*+step/2*/+i*step, base.y));
+    base = genSkew(Point(base.x+(MaxCustSingleLine-1)*step-step, base.y));
     step = -step;
+    base.x += 0.01;
     for(int i = 0; i < MaxCustSingleLine; i++) route.push_back(Point(base.x+step/2+i*step, base.y));
 
 
     std::reverse(route.begin(),route.end());
-    // cout << route.size();
-    // for(int i = 0; i < route.size(); i++) 
-    //     cout << route[i].x << endl;
     MaxCustNum = route.size();
 
     for(int i = 0; i < MaxCheck; i++) {
-        genCPRoute(-0.7 + i*0.22, -0.05);
+        genCPRoute(CPBaseX + i*CPInterval + 0.05, CPBaseY + 0.03);
     }
-
-    cout << "MaxCustNum=" << MaxCustNum << "  all pt=" << route.size() << endl;
 
 }
 
@@ -344,7 +406,6 @@ void drawObject(texName name, Point& pos, float width=0.0, float height=0.0) {
 
     glEnable(GL_TEXTURE_2D);//图像有效化
     glBindTexture( GL_TEXTURE_2D, texId[name] );
-    //cout << name << ' ' << pos.x << ' ' << pos.y << ' ' << width << ' ' << height << endl;
     glEnable(GL_ALPHA_TEST);//试描画开始
     glAlphaFunc(GL_GREATER, 0.5);
 	glBegin(GL_POLYGON);
@@ -369,9 +430,7 @@ void onEscPressed(unsigned char key, int x, int y) {
 
 int getPassengerTexId() {
     srand(clock());
-    //int id = int(rand()*1.0*passengerTexNum/RAND_MAX+1);
     int id = (clock() % passengerTexNum)+1;
-    //cout << "id:" << id << "  time:" << clock() <<  endl;
     return id;
 }
 
@@ -420,7 +479,12 @@ void loadTexture() {
         SOIL_CREATE_NEW_ID,
         SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
     );
-    
+    texId[arrow_left_hover] = SOIL_load_OGL_texture(
+        ".\\source\\left_hover.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
     texId[arrow_left_pressed] = SOIL_load_OGL_texture(
         ".\\source\\left_pressed.png",
         SOIL_LOAD_AUTO,
@@ -434,7 +498,12 @@ void loadTexture() {
         SOIL_CREATE_NEW_ID,
         SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
     );
-    
+    texId[arrow_right_hover] = SOIL_load_OGL_texture(
+        ".\\source\\right_hover.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
     texId[arrow_right_pressed] = SOIL_load_OGL_texture(
         ".\\source\\right_pressed.png",
         SOIL_LOAD_AUTO,
@@ -443,25 +512,131 @@ void loadTexture() {
     );
     
     texId[button_normal] = SOIL_load_OGL_texture(
-        ".\\source\\normal.png",
+        ".\\source\\button_normal.png",
         SOIL_LOAD_AUTO,
         SOIL_CREATE_NEW_ID,
         SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
     );
     
     texId[button_hover] = SOIL_load_OGL_texture(
-        ".\\source\\hover.png",
+        ".\\source\\button_hover.png",
         SOIL_LOAD_AUTO,
         SOIL_CREATE_NEW_ID,
         SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
     );
     
     texId[button_pressed] = SOIL_load_OGL_texture(
-        ".\\source\\pressed.png",
+        ".\\source\\button_pressed.png",
         SOIL_LOAD_AUTO,
         SOIL_CREATE_NEW_ID,
         SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
     );
+
+    texId[initbg] = SOIL_load_OGL_texture(
+        ".\\source\\initbg.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[anibg] = SOIL_load_OGL_texture(
+        ".\\source\\anibg.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+    
+    texId[CPblock] = SOIL_load_OGL_texture(
+        ".\\source\\CPblock.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[CPpause] = SOIL_load_OGL_texture(
+        ".\\source\\CPpause.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[playAndPause_normal] = SOIL_load_OGL_texture(
+        ".\\source\\playAndPause_normal.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[playAndPause_hover] = SOIL_load_OGL_texture(
+        ".\\source\\playAndPause_hover.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[playAndPause_pressed] = SOIL_load_OGL_texture(
+        ".\\source\\playAndPause_pressed.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[gooff_normal] = SOIL_load_OGL_texture(
+        ".\\source\\gooff_normal.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[gooff_hover] = SOIL_load_OGL_texture(
+        ".\\source\\gooff_hover.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[gooff_pressed] = SOIL_load_OGL_texture(
+        ".\\source\\gooff_pressed.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[muslim] = SOIL_load_OGL_texture(
+        ".\\source\\muslim.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[cp_muslim] = SOIL_load_OGL_texture(
+        ".\\source\\cp_muslim.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[plus_normal] = SOIL_load_OGL_texture(
+        ".\\source\\plus_normal.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[plus_hover] = SOIL_load_OGL_texture(
+        ".\\source\\plus_hover.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+
+    texId[plus_pressed] = SOIL_load_OGL_texture(
+        ".\\source\\plus_pressed.png",
+        SOIL_LOAD_AUTO,
+        SOIL_CREATE_NEW_ID,
+        SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
+    );
+    
 
 }
 
@@ -469,14 +644,12 @@ void loadPassengerTex() {
     char s[200];
     for(int i = 1; i <= passengerTexNum; i++) {
         sprintf(s, ".\\source\\p%d.png", i);
-        //cout << s << endl;
         int st = SOIL_load_OGL_texture(
             s,
             SOIL_LOAD_AUTO,
             i,
             SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB
         );
-        //cout << st << endl;
     }
 }
 
@@ -517,3 +690,4 @@ Point::Point(const Point& p) { x = p.x; y = p.y; }
 Point& Point::operator = (const Point& p) { x = p.x; y = p.y; return *this; }
 Point Point::operator + (const Point& p) { return Point(x + p.x, y + p.y); }
 Point Point::operator * (const float m) { return Point(x*m, y*m); }
+bool Point::operator == (const Point& p) {return x == p.x && y == p.y; }

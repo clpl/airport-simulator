@@ -2,40 +2,67 @@
 
 #include <iostream>
 #include <string>
+#include <random>
+#include <ctime>
+#include <algorithm>
 #include "queue.h"
 #include "struct.h"
 #include "passenger.h"
 #include "globalvar.h"
 
+using namespace std;
+
+int maxVecNum = 500;
+
+Queue::Queue() {
+    front = rear = num = 0;
+    for(int i = 0; i < maxVecNum; i++)
+        q.push_back(Passenger());
+}
+
 Passenger& Queue::operator[](int n) {
-    return q[n];
+    int index = (front + n) % maxVecNum;
+    return q[index];
 }
 
 void Queue::addPassenger(Passenger pass) {
-    q.push_back(pass);
-    //std::cout<<"***"<<q.size()<<std::endl;
+    q[rear] = pass;
+    rear = (rear + 1) % maxVecNum;
+    num++;
 }
 
 void Queue::addPassenger(int arriveTime, int checkTime) {
+	if (isoffDuty)
+		return;
     Passenger pass(arriveTime, checkTime);
-    q.push_back(pass);
+	srand((unsigned)time(NULL));
+	if(rand()%100<6)
+		pass.isMuslim = true;
+	else
+		pass.isMuslim = false;
+    q[rear] = pass;
+    rear = (rear + 1) % maxVecNum;
+    num++;
 }
 
 void Queue::popPassenger() {
-    if(!q.empty()) {
-        q.erase(q.begin());
-    }
+    front = (front + 1) % maxVecNum;
+    num--;
 }
 
 Passenger& Queue::getFirstPassenger() {
-    return q[0];
+    return q[front];
+}
+
+Passenger& Queue::getLastPassenger() {
+    return q[(rear+499)%maxVecNum];
 }
 
 int Queue::getNum() {
-    return q.size();
+    return num;
 }
 
 bool Queue::isempty()
 {
-    return getNum() == 0;
+    return num == 0;
 }
